@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AE Drift</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell" aria-label="AE Drift game">
+      <canvas id="game" aria-label="AE Drift playfield"></canvas>
+
+      <section class="hud" aria-live="polite">
+        <div class="score-card">
+          <span class="hud-label">score</span>
+          <strong id="score">0</strong>
+        </div>
+        <div class="boost-card">
+          <span class="hud-label boost-label">boost <kbd>space</kbd></span>
+          <span class="boost-track" aria-hidden="true">
+            <span id="boost-fill"></span>
+          </span>
+        </div>
+        <div id="hull" class="hull-pips" aria-label="Hull"></div>
+      </section>
+
+      <button id="mute" class="icon-button" type="button" aria-label="Toggle sound" title="Toggle sound">
+        <span aria-hidden="true">♪</span>
+      </button>
+
+      <section id="toast" class="toast" aria-live="assertive"></section>
+
+      <section id="panel" class="panel">
+        <div class="brand-mark" aria-hidden="true">
+          <img src="assets/logo-ae.svg" alt="" />
+        </div>
+        <h1>AE Drift</h1>
+        <p id="panel-copy">Hold to pull. Release to drift. Space to boost.</p>
+        <button id="start" type="button">Launch</button>
+      </section>
+
+      <section id="upgrade" class="upgrade is-hidden" aria-live="assertive">
+        <p class="upgrade-kicker">upgrade ready</p>
+        <h2>Choose Your Drift</h2>
+        <div id="upgrade-options" class="upgrade-options"></div>
+      </section>
+
+      <section id="audio-panel" class="audio-panel is-hidden" aria-label="Audio controls">
+        <label for="volume">volume <span id="volume-value">100%</span></label>
+        <input id="volume" type="range" min="0" max="100" value="100" />
+        <button id="restart" class="restart-button" type="button">Restart run</button>
+      </section>
+
+      <nav class="touch" aria-label="Touch controls">
+        <button class="touch-button" data-touch="left" aria-label="Turn left"></button>
+        <button class="touch-button thrust" data-touch="thrust" aria-label="Thrust"></button>
+        <button class="touch-button" data-touch="right" aria-label="Turn right"></button>
+      </nav>
+    </main>
+
+    <script src="game.js"></script>
+  </body>
+</html>
