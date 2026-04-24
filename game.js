@@ -14,6 +14,7 @@ const audioPanelEl = document.querySelector("#audio-panel");
 const volumeSliderEl = document.querySelector("#volume");
 const volumeValueEl = document.querySelector("#volume-value");
 const restartButton = document.querySelector("#restart");
+const songOptionButtons = document.querySelectorAll("[data-song-mode]");
 
 const logo = new Image();
 logo.src = "assets/logo-ae.svg";
@@ -56,6 +57,7 @@ let musicNextTime = 0;
 let musicStep = 0;
 let engineNextTime = 0;
 let volume = readVolume();
+let songMode = readSongMode();
 
 const songs = [
   {
@@ -87,6 +89,16 @@ const songs = [
     bass: [0, 0, 0, 7, 0, 10, 0, 7],
   },
 ];
+
+const dubstepSong = {
+  name: "dubstep",
+  bpm: 140,
+  roots: [55, 55, 51.91, 49],
+  wobble: [0, 0, 7, -5, 0, 0, 10, 7, -5, -5, 3, 0, 0, 12, 7, -5],
+  rates: [4, 8, 12, 6, 4, 16, 8, 12],
+  vowels: [0, 1, 2, 1, 2, 0, 1, 2],
+  lead: [24, 19, 22, 19],
+};
 
 const baseStats = {
   thrust: 430,
@@ -929,7 +941,7 @@ function drawPauseOverlay() {
   ctx.fillText("PAUSED", width / 2, height / 2 - 78);
   ctx.fillStyle = "rgba(247, 244, 237, 0.68)";
   ctx.font = "700 16px Inter, system-ui, sans-serif";
-  ctx.fillText("Esc resumes · restart and volume below", width / 2, height / 2 - 34);
+  ctx.fillText("Esc resumes · song, restart and volume below", width / 2, height / 2 - 34);
   ctx.textAlign = "left";
   ctx.font = "800 15px Inter, system-ui, sans-serif";
   const controls = [
@@ -1481,8 +1493,8 @@ function tone(freq, duration, gain = 0.04, type = "triangle", destination = sfxG
   osc.stop(start + duration + 0.02);
 }
 
-function noise(duration, gain = 0.08, start = audio?.currentTime || 0) {
-  if (!audio || muted || !sfxGain) return;
+function noise(duration, gain = 0.08, start = audio?.currentTime || 0, destination = sfxGain) {
+  if (!audio || muted || !destination) return;
   const sampleCount = Math.max(1, Math.floor(audio.sampleRate * duration));
   const buffer = audio.createBuffer(1, sampleCount, audio.sampleRate);
   const data = buffer.getChannelData(0);
@@ -1494,7 +1506,7 @@ function noise(duration, gain = 0.08, start = audio?.currentTime || 0) {
   source.buffer = buffer;
   vol.gain.setValueAtTime(gain, start);
   vol.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-  source.connect(vol).connect(sfxGain);
+  source.connect(vol).connect(destination);
   source.start(start);
 }
 
@@ -1514,7 +1526,8 @@ function updateMusic() {
   if (state.phase !== "playing" && state.phase !== "upgrade") return;
   if (musicNextTime < audio.currentTime - 0.05) startMusic();
   const song = currentSong();
-  const stepDuration = 60 / song.bpm / 2;
+  const stepsPerBeat = song.name === "dubstep" ? 4 : 2;
+  const stepDuration = 60 / song.bpm / stepsPerBeat;
   while (musicNextTime < audio.currentTime + 0.16) {
     scheduleMusicStep(musicNextTime, musicStep, song);
     musicNextTime += stepDuration;
@@ -1523,10 +1536,15 @@ function updateMusic() {
 }
 
 function currentSong() {
+  if (songMode === "dubstep") return dubstepSong;
   return songs[Math.floor((state.wave - 1) / 2) % songs.length];
 }
 
 function scheduleMusicStep(time, step, song) {
+  if (song.name === "dubstep") {
+    scheduleDubstepStep(time, step, song);
+    return;
+  }
   const root = song.roots[Math.floor(step / 8) % song.roots.length];
   const leadFreq = semitone(root * 2, song.arp[step % song.arp.length]);
   const bassFreq = semitone(root, song.bass[step % song.bass.length]);
@@ -1535,6 +1553,210 @@ function scheduleMusicStep(time, step, song) {
   if (step % 2 === 0) tone(bassFreq, 0.12, 0.074, "square", musicGain, time);
   if (step % 4 === 2) tone(root * 2, 0.045, 0.022, "triangle", musicGain, time + 0.03);
   if (song.name === "danger" && step % 4 === 0) noise(0.025, 0.018, time + 0.04);
+}
+
+function scheduleDubstepStep(time, step, song) {
+  const barStep = step % 16;
+  const root = song.roots[Math.floor(step / 16) % song.roots.length];
+  const wobbleStep = song.wobble[barStep];
+  const bassFreq = semitone(root, wobbleStep - 12);
+
+  if ([0, 6, 14].includes(barStep)) kickDrum(time, barStep === 0 ? 1 : 0.74);
+  if (barStep === 8) snareDrum(time);
+  if ([2, 5, 10, 13, 15].includes(barStep)) hatDrum(time, barStep === 15 ? 0.46 : 0.28);
+
+  if (![7, 15].includes(barStep)) {
+    const phraseStep = Math.floor(barStep / 2) % song.rates.length;
+    const rate = song.rates[phraseStep];
+    const mainHit = barStep % 2 === 0;
+    const accent = barStep === 0 || barStep === 8 ? 1.22 : 1;
+    const answerDrop = mainHit ? 0 : -12;
+    const answerFreq = semitone(bassFreq, answerDrop);
+    wobbleBass(answerFreq, mainHit ? 0.15 : 0.09, (mainHit ? 0.13 : 0.082) * accent, mainHit ? rate : rate * 1.5, time);
+    if ([1, 3, 5, 9, 11, 13].includes(barStep)) {
+      talkBass(answerFreq * 2, 0.12, 0.072 * accent, song.vowels[phraseStep], time + 0.006);
+    }
+    if ([2, 6, 10, 14].includes(barStep)) {
+      talkBass(bassFreq * 2, 0.15, 0.085 * accent, song.vowels[phraseStep], time + 0.012);
+    }
+  }
+
+  if ([7, 15].includes(barStep)) screechStab(root, time);
+  if ([3, 11].includes(barStep)) {
+    const leadFreq = semitone(root * 2, song.lead[Math.floor(barStep / 4) % song.lead.length]);
+    tone(leadFreq, 0.055, 0.014, "triangle", musicGain, time + 0.018);
+  }
+}
+
+function wobbleBass(freq, duration, gain, rate, start) {
+  if (!audio || muted || !musicGain) return;
+  const osc = audio.createOscillator();
+  const detuned = audio.createOscillator();
+  const sub = audio.createOscillator();
+  const filter = audio.createBiquadFilter();
+  const growl = audio.createBiquadFilter();
+  const drive = audio.createWaveShaper();
+  const vol = audio.createGain();
+  const lfo = audio.createOscillator();
+  const lfoGain = audio.createGain();
+
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(freq, start);
+  detuned.type = "sawtooth";
+  detuned.frequency.setValueAtTime(freq * 1.006, start);
+  sub.type = "sine";
+  sub.frequency.setValueAtTime(freq / 2, start);
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(250, start);
+  filter.Q.setValueAtTime(8.5, start);
+  growl.type = "peaking";
+  growl.frequency.setValueAtTime(720, start);
+  growl.Q.setValueAtTime(6.5, start);
+  growl.gain.setValueAtTime(11, start);
+  drive.curve = distortionCurve(54);
+  drive.oversample = "2x";
+  lfo.type = "triangle";
+  lfo.frequency.setValueAtTime(rate, start);
+  lfoGain.gain.setValueAtTime(720, start);
+  vol.gain.setValueAtTime(0.0001, start);
+  vol.gain.linearRampToValueAtTime(Math.max(0.0002, gain), start + 0.018);
+  vol.gain.setValueAtTime(Math.max(0.0002, gain), Math.max(start + 0.019, start + duration - 0.038));
+  vol.gain.linearRampToValueAtTime(0.0001, start + duration);
+
+  lfo.connect(lfoGain).connect(filter.frequency);
+  osc.connect(filter);
+  detuned.connect(filter);
+  sub.connect(filter);
+  filter.connect(drive).connect(growl).connect(vol).connect(musicGain);
+  osc.start(start);
+  detuned.start(start);
+  sub.start(start);
+  lfo.start(start);
+  osc.stop(start + duration + 0.03);
+  detuned.stop(start + duration + 0.03);
+  sub.stop(start + duration + 0.03);
+  lfo.stop(start + duration + 0.03);
+}
+
+function talkBass(freq, duration, gain, vowel, start) {
+  if (!audio || muted || !musicGain) return;
+  const osc = audio.createOscillator();
+  const detuned = audio.createOscillator();
+  const filter = audio.createBiquadFilter();
+  const formant = audio.createBiquadFilter();
+  const drive = audio.createWaveShaper();
+  const vol = audio.createGain();
+  const vowelStart = [460, 760, 1120][vowel % 3];
+  const vowelEnd = [1280, 420, 1650][vowel % 3];
+
+  osc.type = "sawtooth";
+  detuned.type = "square";
+  osc.frequency.setValueAtTime(freq, start);
+  detuned.frequency.setValueAtTime(freq * 0.502, start);
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(vowelStart, start);
+  filter.frequency.exponentialRampToValueAtTime(vowelEnd, start + duration * 0.58);
+  filter.frequency.exponentialRampToValueAtTime(vowelStart * 0.8, start + duration);
+  filter.Q.setValueAtTime(10, start);
+  formant.type = "peaking";
+  formant.frequency.setValueAtTime(vowelStart * 1.45, start);
+  formant.frequency.exponentialRampToValueAtTime(vowelEnd * 1.12, start + duration * 0.7);
+  formant.Q.setValueAtTime(7, start);
+  formant.gain.setValueAtTime(13, start);
+  drive.curve = distortionCurve(68);
+  drive.oversample = "2x";
+  vol.gain.setValueAtTime(0.0001, start);
+  vol.gain.linearRampToValueAtTime(gain, start + 0.018);
+  vol.gain.setValueAtTime(gain, Math.max(start + 0.02, start + duration - 0.04));
+  vol.gain.linearRampToValueAtTime(0.0001, start + duration);
+
+  osc.connect(filter);
+  detuned.connect(filter);
+  filter.connect(drive).connect(formant).connect(vol).connect(musicGain);
+  osc.start(start);
+  detuned.start(start);
+  osc.stop(start + duration + 0.03);
+  detuned.stop(start + duration + 0.03);
+}
+
+function screechStab(root, start) {
+  if (!audio || muted || !musicGain) return;
+  const osc = audio.createOscillator();
+  const filter = audio.createBiquadFilter();
+  const vol = audio.createGain();
+  const freq = semitone(root * 4, 19);
+
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(freq * 1.4, start);
+  osc.frequency.exponentialRampToValueAtTime(freq * 0.72, start + 0.12);
+  filter.type = "bandpass";
+  filter.frequency.setValueAtTime(2600, start);
+  filter.frequency.exponentialRampToValueAtTime(980, start + 0.12);
+  filter.Q.setValueAtTime(9, start);
+  vol.gain.setValueAtTime(0.0001, start);
+  vol.gain.linearRampToValueAtTime(0.026, start + 0.018);
+  vol.gain.linearRampToValueAtTime(0.0001, start + 0.13);
+  osc.connect(filter).connect(vol).connect(musicGain);
+  osc.start(start);
+  osc.stop(start + 0.15);
+}
+
+function kickDrum(start, gain = 1) {
+  if (!audio || muted || !musicGain) return;
+  const osc = audio.createOscillator();
+  const vol = audio.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(128, start);
+  osc.frequency.exponentialRampToValueAtTime(42, start + 0.14);
+  vol.gain.setValueAtTime(0.0001, start);
+  vol.gain.linearRampToValueAtTime(0.17 * gain, start + 0.012);
+  vol.gain.exponentialRampToValueAtTime(0.0001, start + 0.22);
+  osc.connect(vol).connect(musicGain);
+  osc.start(start);
+  osc.stop(start + 0.24);
+}
+
+function snareDrum(start) {
+  filteredNoise(0.2, 0.15, start, musicGain, "bandpass", 1550, 1.1, 0.014);
+  tone(175, 0.11, 0.058, "triangle", musicGain, start + 0.004);
+  tone(92, 0.055, 0.026, "triangle", musicGain, start + 0.018);
+}
+
+function hatDrum(start, gain = 0.34) {
+  filteredNoise(0.052, 0.026 * gain, start, musicGain, "highpass", 5200, 0.7, 0.008);
+}
+
+function filteredNoise(duration, gain, start, destination, filterType, frequency, q = 1, attack = 0.006) {
+  if (!audio || muted || !destination) return;
+  const sampleCount = Math.max(1, Math.floor(audio.sampleRate * duration));
+  const buffer = audio.createBuffer(1, sampleCount, audio.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < sampleCount; i += 1) {
+    data[i] = (Math.random() * 2 - 1) * (1 - i / sampleCount);
+  }
+  const source = audio.createBufferSource();
+  const filter = audio.createBiquadFilter();
+  const vol = audio.createGain();
+  source.buffer = buffer;
+  filter.type = filterType;
+  filter.frequency.setValueAtTime(frequency, start);
+  filter.Q.setValueAtTime(q, start);
+  vol.gain.setValueAtTime(0.0001, start);
+  vol.gain.linearRampToValueAtTime(gain, start + attack);
+  vol.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+  source.connect(filter).connect(vol).connect(destination);
+  source.start(start);
+}
+
+function distortionCurve(amount) {
+  const samples = 256;
+  const curve = new Float32Array(samples);
+  const deg = Math.PI / 180;
+  for (let i = 0; i < samples; i += 1) {
+    const x = (i * 2) / samples - 1;
+    curve[i] = ((3 + amount) * x * 20 * deg) / (Math.PI + amount * Math.abs(x));
+  }
+  return curve;
 }
 
 function pickupSound(rare) {
@@ -1627,12 +1849,42 @@ function writeVolume(value) {
   }
 }
 
+function readSongMode() {
+  try {
+    const stored = localStorage.getItem("ae-drift-song");
+    return stored === "dubstep" ? "dubstep" : "default";
+  } catch {
+    return "default";
+  }
+}
+
+function writeSongMode(value) {
+  try {
+    localStorage.setItem("ae-drift-song", value);
+  } catch {
+    // Song selection still works for this session when storage is blocked.
+  }
+}
+
 function setVolume(value) {
   volume = Math.max(0, Math.min(1, value));
   volumeSliderEl.value = Math.round(volume * 100);
   volumeValueEl.textContent = `${Math.round(volume * 100)}%`;
   writeVolume(volume);
   syncMute();
+}
+
+function setSongMode(value) {
+  songMode = value === "dubstep" ? "dubstep" : "default";
+  writeSongMode(songMode);
+  musicNextTime = audio ? audio.currentTime + 0.04 : 0;
+  musicStep = 0;
+  for (const button of songOptionButtons) {
+    const active = button.dataset.songMode === songMode;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  }
+  if (audio && !muted) startMusic();
 }
 
 function handleSecret(code) {
@@ -1702,6 +1954,13 @@ volumeSliderEl.addEventListener("input", () => {
   muteButton.setAttribute("aria-label", "Toggle sound");
   setVolume(Number(volumeSliderEl.value) / 100);
 });
+for (const button of songOptionButtons) {
+  button.addEventListener("click", () => {
+    ensureAudio();
+    setSongMode(button.dataset.songMode);
+    showToast(songMode === "dubstep" ? "Dubstep drive online" : "Default soundtrack online");
+  });
+}
 upgradeOptionsEl.addEventListener("click", (event) => {
   const button = event.target.closest("[data-upgrade]");
   if (button) chooseUpgrade(button.dataset.upgrade);
@@ -1745,5 +2004,6 @@ canvas.addEventListener("pointercancel", () => {
 });
 resize();
 setVolume(volume);
+setSongMode(songMode);
 updateHud();
 requestAnimationFrame(frame);

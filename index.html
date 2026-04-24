@@ -48,6 +48,13 @@
       <section id="audio-panel" class="audio-panel is-hidden" aria-label="Audio controls">
         <label for="volume">volume <span id="volume-value">100%</span></label>
         <input id="volume" type="range" min="0" max="100" value="100" />
+        <div class="song-picker" aria-label="Song select">
+          <span>song</span>
+          <div class="song-options">
+            <button class="song-option is-active" type="button" data-song-mode="default">Default</button>
+            <button class="song-option" type="button" data-song-mode="dubstep">Dubstep</button>
+          </div>
+        </div>
         <button id="restart" class="restart-button" type="button">Restart run</button>
       </section>
 
